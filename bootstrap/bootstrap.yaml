@@ -1,0 +1,20 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: bootstrap
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  serviceAccountName: kustomize-controller
+  path: ../_base
+  prune: true
+  timeout: 1m
+  postBuild:
+    substitute:
+      fluxAppsRepo: flux-apps
+      namespace: flux-system
+      serviceAccountHelm: helm-controller
+      serviceAccountKust: kustomize-controller

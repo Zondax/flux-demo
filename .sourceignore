@@ -1,0 +1,6 @@
+# Flux ignore
+# https://fluxcd.io/flux/components/source/gitrepositories/#excluding-files
+docs/
+scripts/
+*.md
+LICENSE

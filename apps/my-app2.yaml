@@ -1,0 +1,54 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: my-app2
+spec:
+  interval: 10m
+  url: oci://registry-1.docker.io/zondax/demo
+  ref:
+    tag: 0.0.1-0
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: my-app2
+spec:
+  serviceAccountName: ${serviceAccountHelm}
+  interval: 10m
+  chartRef:
+    kind: OCIRepository
+    name: my-app2
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      remediateLastFailure: false
+  targetNamespace: my-app2
+  releaseName: my-app2
+  values:
+    enabled: true
+    replicas: 3
+    kind: Deployment
+    fullname: my-app2
+    image:
+      repository: alpine
+      tag: latest
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+      command: [ "/bin/sh", "-c", "--" ]
+      args: [ "while true; do echo $(date) workload ${MY_DEPLOY_NAME} pod ${MY_POD_NAME} && sleep 30; done;" ]
+    secret:
+      create: true 
+      name: ""
+      key: setup-key
+      type: Opaque
+      value: MY_SECRET_VALUE
+    resources:
+      limits:
+        cpu: 50m
+        memory: 16Mi
+      requests:
+        cpu: 10m
+        memory: 8Mi
