@@ -11,4 +11,5 @@ resources:
   - my-app1.yaml
   - my-app2.yaml
   - my-app3.yaml
+  - my-app4.yaml
   - prometheus.yaml

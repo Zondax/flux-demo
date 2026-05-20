@@ -1,0 +1,62 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: my-app4
+spec:
+  interval: 10m
+  url: oci://registry-1.docker.io/zondax/demo
+  ref:
+    tag: 0.0.2-0
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: my-app4
+spec:
+  serviceAccountName: ${serviceAccountHelm}
+  interval: 10m
+  chartRef:
+    kind: OCIRepository
+    name: my-app4
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      remediateLastFailure: false
+  targetNamespace: my-app4
+  releaseName: my-app4
+  values:
+    enabled: true
+    # Three replicas so the multistream log viewer has three distinct
+    # streams to merge in the mkt-real walkthrough.
+    replicas: 3
+    kind: Deployment
+    fullname: my-app4
+    image:
+      repository: alpine
+      tag: latest
+      pullPolicy: IfNotPresent
+      pullSecrets: []
+      command: [ "/bin/sh", "-c", "--" ]
+      # Each pod emits one structured JSON log line per second, with
+      # randomized level / method / path / duration_ms / user_id fields.
+      # The mkt walkthrough uses these fields for the dot-notation filter
+      # demo (.level=error, .duration_ms>500). YAML is single-quoted so
+      # the `"` chars inside the printf format string don't need escaping.
+      args:
+        - 'while true; do R=$((RANDOM % 10)); if [ $R -lt 2 ]; then L=error; elif [ $R -lt 5 ]; then L=warn; else L=info; fi; D=$((RANDOM % 1500)); case $((RANDOM % 3)) in 0) M=POST;; 1) M=GET;; 2) M=PUT;; esac; case $((RANDOM % 3)) in 0) P=/api/v1/users;; 1) P=/api/v1/orders;; 2) P=/api/v1/sessions;; esac; U=u-$((RANDOM % 100)); printf "{\"ts\":\"%s\",\"level\":\"%s\",\"method\":\"%s\",\"path\":\"%s\",\"duration_ms\":%d,\"user_id\":\"%s\",\"pod\":\"%s\"}\n" "$(date -Iseconds)" "$L" "$M" "$P" "$D" "$U" "${MY_POD_NAME}"; sleep 1; done'
+    secret:
+      create: true
+      name: ""
+      key: setup-key
+      type: Opaque
+      value: MY_SECRET_VALUE
+    resources:
+      limits:
+        cpu: 50m
+        memory: 16Mi
+      requests:
+        cpu: 10m
+        memory: 8Mi
