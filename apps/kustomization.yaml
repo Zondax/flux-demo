@@ -10,3 +10,5 @@ labels:
 resources:
   - my-app1.yaml
   - my-app2.yaml
+  - my-app3.yaml
+  - prometheus.yaml
