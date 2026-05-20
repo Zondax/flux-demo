@@ -7,4 +7,5 @@ labels:
       flux.zondax.io/src: flux-demo
       flux.zondax.io/component: bootstrap
 resources:
+  - storage.yaml
   - apps.yaml
