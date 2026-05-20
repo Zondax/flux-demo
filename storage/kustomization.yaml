@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# NO `namespace:` rewrite — local-path-provisioner ships its own
+# `local-path-storage` namespace and we must let it land there, not get
+# remapped into flux-system the way the apps/ Kustomization does.
+labels:
+  - includeSelectors: false
+    pairs:
+      flux.zondax.io/bootstrapping: flux-demo
+      flux.zondax.io/src: flux-demo
+      flux.zondax.io/component: storage
+resources:
+  - local-path-provisioner.yaml

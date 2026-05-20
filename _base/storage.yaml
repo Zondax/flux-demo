@@ -1,25 +1,18 @@
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: apps
+  name: storage
   namespace: ${namespace}
 spec:
-  # `storage` must apply first — it installs the default StorageClass that
-  # my-app3's PVC binds against. Without this dependsOn, the StatefulSet
-  # would race the SC creation and Helm-install with timeout (5min) on
-  # cold leases.
-  dependsOn:
-    - name: storage
   interval: 10m
   sourceRef:
     kind: GitRepository
     name: flux-system
   serviceAccountName: ${serviceAccountKust}
-  path: ./apps
+  path: ./storage
   prune: true
   timeout: 1m
   postBuild:
     substitute:
       namespace: ${namespace}
-      serviceAccountHelm: ${serviceAccountHelm}
       serviceAccountKust: ${serviceAccountKust}
