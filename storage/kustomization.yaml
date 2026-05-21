@@ -1,8 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-# NO `namespace:` rewrite — local-path-provisioner ships its own
-# `local-path-storage` namespace and we must let it land there, not get
-# remapped into flux-system the way the apps/ Kustomization does.
+# NO `namespace:` rewrite — the vendored csi-driver-host-path manifest
+# ships its own `csi-hostpath-storage` namespace and rebinds every
+# subject to it. Letting the apps/ Kustomization's `namespace: ${namespace}`
+# template trick land here would remap the plugin StatefulSet + RBAC into
+# `flux-system` and break the driver registration.
 labels:
   - includeSelectors: false
     pairs:
@@ -10,4 +12,4 @@ labels:
       flux.zondax.io/src: flux-demo
       flux.zondax.io/component: storage
 resources:
-  - local-path-provisioner.yaml
+  - csi-driver-host-path.yaml

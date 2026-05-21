@@ -1,0 +1,409 @@
+# csi-driver-host-path v1.17.0
+#
+# Source manifests:
+#   https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/v1.17.0/deploy/kubernetes-1.30/hostpath/csi-hostpath-driverinfo.yaml
+#   https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/v1.17.0/deploy/kubernetes-1.30/hostpath/csi-hostpath-plugin.yaml
+#   https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/v1.17.0/examples/csi-storageclass.yaml
+#
+# Why we vendor instead of using local-path-provisioner:
+#   rancher.io/local-path provisions plain `kind: HostPath` PersistentVolumes,
+#   and kubelet does NOT emit `kubelet_volume_stats_*` metrics for HostPath
+#   PVs (only CSI / Local / a few in-tree drivers). The mkt-real metrics
+#   walkthrough wants per-PVC capacity/used charts, which only show up
+#   through the CSI metrics path.
+#
+# Vendored verbatim with three deltas:
+#   1. All `namespace: default` references rewritten to
+#      `csi-hostpath-storage` (the upstream manifests assume `default`).
+#   2. csi-snapshotter sidecar + its ClusterRoleBindings / RoleBinding
+#      removed — we don't need VolumeSnapshot support and the sidecar
+#      crashloops without the external-snapshotter CRDs installed.
+#   3. `storageclass.kubernetes.io/is-default-class: "true"` annotation
+#      on the StorageClass so PVCs without an explicit `storageClassName`
+#      (which is how the zondax/demo chart's `persistence.enabled` ends
+#      up) auto-bind through this driver.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: csi-hostpath-storage
+---
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: hostpath.csi.k8s.io
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: hostpath.csi.k8s.io
+    app.kubernetes.io/component: csi-driver
+spec:
+  volumeLifecycleModes:
+    - Persistent
+    - Ephemeral
+  podInfoOnMount: true
+  fsGroupPolicy: File
+---
+  # All of the individual sidecar RBAC roles get bound
+# to this account.
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: csi-hostpathplugin-sa
+  namespace: csi-hostpath-storage
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: serviceaccount
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: attacher-cluster-role
+  name: csi-hostpathplugin-attacher-cluster-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-attacher-runner
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+  namespace: csi-hostpath-storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: health-monitor-controller-cluster-role
+  name: csi-hostpathplugin-health-monitor-controller-cluster-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-health-monitor-controller-runner
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+  namespace: csi-hostpath-storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: provisioner-cluster-role
+  name: csi-hostpathplugin-provisioner-cluster-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-provisioner-runner
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+  namespace: csi-hostpath-storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: resizer-cluster-role
+  name: csi-hostpathplugin-resizer-cluster-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: external-resizer-runner
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+  namespace: csi-hostpath-storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: attacher-role
+  name: csi-hostpathplugin-attacher-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: external-attacher-cfg
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: health-monitor-controller-role
+  name: csi-hostpathplugin-health-monitor-controller-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: external-health-monitor-controller-cfg
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: provisioner-role
+  name: csi-hostpathplugin-provisioner-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: external-provisioner-cfg
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: resizer-role
+  name: csi-hostpathplugin-resizer-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: external-resizer-cfg
+subjects:
+- kind: ServiceAccount
+  name: csi-hostpathplugin-sa
+---
+kind: StatefulSet
+apiVersion: apps/v1
+metadata:
+  name: csi-hostpathplugin
+  namespace: csi-hostpath-storage
+  labels:
+    app.kubernetes.io/instance: hostpath.csi.k8s.io
+    app.kubernetes.io/part-of: csi-driver-host-path
+    app.kubernetes.io/name: csi-hostpathplugin
+    app.kubernetes.io/component: plugin
+spec:
+  serviceName: "csi-hostpathplugin"
+  # One replica only:
+  # Host path driver only works when everything runs
+  # on a single node.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: hostpath.csi.k8s.io
+      app.kubernetes.io/part-of: csi-driver-host-path
+      app.kubernetes.io/name: csi-hostpathplugin
+      app.kubernetes.io/component: plugin
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: hostpath.csi.k8s.io
+        app.kubernetes.io/part-of: csi-driver-host-path
+        app.kubernetes.io/name: csi-hostpathplugin
+        app.kubernetes.io/component: plugin
+    spec:
+      serviceAccountName: csi-hostpathplugin-sa
+      containers:
+        - name: hostpath
+          image: registry.k8s.io/sig-storage/hostpathplugin:v1.16.1
+          args:
+            - "--drivername=hostpath.csi.k8s.io"
+            - "--v=5"
+            - "--endpoint=$(CSI_ENDPOINT)"
+            - "--nodeid=$(KUBE_NODE_NAME)"
+            # end hostpath args
+          env:
+            - name: CSI_ENDPOINT
+              value: unix:///csi/csi.sock
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          ports:
+          - containerPort: 9898
+            name: healthz
+            protocol: TCP
+          livenessProbe:
+            failureThreshold: 5
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            timeoutSeconds: 3
+            periodSeconds: 2
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+            - mountPath: /var/lib/kubelet/pods
+              mountPropagation: Bidirectional
+              name: mountpoint-dir
+            - mountPath: /var/lib/kubelet/plugins
+              mountPropagation: Bidirectional
+              name: plugins-dir
+            - mountPath: /csi-data-dir
+              name: csi-data-dir
+            - mountPath: /dev
+              name: dev-dir
+
+        - name: csi-external-health-monitor-controller
+          image: registry.k8s.io/sig-storage/csi-external-health-monitor-controller:v0.14.0
+          args:
+            - "--v=5"
+            - "--csi-address=$(ADDRESS)"
+            - "--leader-election"
+          env:
+            - name: ADDRESS
+              value: /csi/csi.sock
+          imagePullPolicy: "IfNotPresent"
+          volumeMounts:
+            - name: socket-dir
+              mountPath: /csi
+
+        - name: node-driver-registrar
+          image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.13.0
+          args:
+            - --v=5
+            - --csi-address=/csi/csi.sock
+            - --kubelet-registration-path=/var/lib/kubelet/plugins/csi-hostpath/csi.sock
+          securityContext:
+            # This is necessary only for systems with SELinux, where
+            # non-privileged sidecar containers cannot access unix domain socket
+            # created by privileged CSI driver container.
+            privileged: true
+          env:
+            - name: KUBE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: spec.nodeName
+          volumeMounts:
+          - mountPath: /csi
+            name: socket-dir
+          - mountPath: /registration
+            name: registration-dir
+          - mountPath: /csi-data-dir
+            name: csi-data-dir
+
+        - name: liveness-probe
+          volumeMounts:
+          - mountPath: /csi
+            name: socket-dir
+          image: registry.k8s.io/sig-storage/livenessprobe:v2.15.0
+          args:
+          - --csi-address=/csi/csi.sock
+          - --health-port=9898
+
+        - name: csi-attacher
+          image: registry.k8s.io/sig-storage/csi-attacher:v4.8.0
+          args:
+            - --v=5
+            - --csi-address=/csi/csi.sock
+          securityContext:
+            # This is necessary only for systems with SELinux, where
+            # non-privileged sidecar containers cannot access unix domain socket
+            # created by privileged CSI driver container.
+            privileged: true
+          volumeMounts:
+          - mountPath: /csi
+            name: socket-dir
+
+        - name: csi-provisioner
+          image: registry.k8s.io/sig-storage/csi-provisioner:v5.2.0
+          args:
+            - -v=5
+            - --csi-address=/csi/csi.sock
+            - --feature-gates=Topology=true
+            # end csi-provisioner args
+          securityContext:
+            # This is necessary only for systems with SELinux, where
+            # non-privileged sidecar containers cannot access unix domain socket
+            # created by privileged CSI driver container.
+            privileged: true
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+
+        - name: csi-resizer
+          image: registry.k8s.io/sig-storage/csi-resizer:v1.13.1
+          args:
+            - -v=5
+            - -csi-address=/csi/csi.sock
+          securityContext:
+            # This is necessary only for systems with SELinux, where
+            # non-privileged sidecar containers cannot access unix domain socket
+            # created by privileged CSI driver container.
+            privileged: true
+          volumeMounts:
+            - mountPath: /csi
+              name: socket-dir
+
+        # end csi containers
+
+      volumes:
+        - hostPath:
+            path: /var/lib/kubelet/plugins/csi-hostpath
+            type: DirectoryOrCreate
+          name: socket-dir
+        - hostPath:
+            path: /var/lib/kubelet/pods
+            type: DirectoryOrCreate
+          name: mountpoint-dir
+        - hostPath:
+            path: /var/lib/kubelet/plugins_registry
+            type: Directory
+          name: registration-dir
+        - hostPath:
+            path: /var/lib/kubelet/plugins
+            type: Directory
+          name: plugins-dir
+        - hostPath:
+            # 'path' is where PV data is persisted on host.
+            # using /tmp is also possible while the PVs will not available after plugin container recreation or host reboot
+            path: /var/lib/csi-hostpath-data/
+            type: DirectoryOrCreate
+          name: csi-data-dir
+        - hostPath:
+            path: /dev
+            type: Directory
+          name: dev-dir
+        # end csi volumes
+
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-hostpath-sc
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: hostpath.csi.k8s.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
