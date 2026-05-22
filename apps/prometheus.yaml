@@ -47,10 +47,7 @@ spec:
           memory: 400Mi
         limits:
           memory: 1Gi
-    # Keep node-exporter and kube-state-metrics — they're what surfaces
-    # per-pod CPU/memory and per-PVC volume stats that Kunobi's metrics
-    # view queries.
     prometheus-node-exporter:
-      enabled: true
+      enabled: false
     kube-state-metrics:
       enabled: true
