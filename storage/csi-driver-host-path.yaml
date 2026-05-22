@@ -41,6 +41,7 @@ metadata:
     app.kubernetes.io/name: hostpath.csi.k8s.io
     app.kubernetes.io/component: csi-driver
 spec:
+  attachRequired: false
   volumeLifecycleModes:
     - Persistent
     - Ephemeral
